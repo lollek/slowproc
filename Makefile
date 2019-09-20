@@ -1,5 +1,5 @@
 CC =		cc
-CFLAGS =	-Wall -Wextra -Werror -pedantic -Werror=implicit-function-declaration -std=gnu99 -g3
+CFLAGS =	-Wall -Wextra -Werror -pedantic -Werror=implicit-function-declaration -std=gnu11 -g3
 
 CFILES = $(wildcard src/*.c)
 HFILES = $(wildcard src/*.h)
