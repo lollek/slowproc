@@ -9,6 +9,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/wait.h>
+#include <sys/param.h>
 
 #include "utils.h"
 
@@ -126,4 +127,45 @@ socket_t *socket_create(char const *restrict hostname, char const *restrict port
     socket_t *socket = xmalloc(sizeof(socket_t));
     socket->fd = sockfd;
     return socket;
+}
+
+void socket_join(socket_t *first, socket_t *second) {
+    fd_set sockets;
+
+    FD_SET(first->fd, &sockets);
+    FD_SET(second->fd, &sockets);
+
+    while (1) {
+        fd_set read_fds = sockets;
+        int fd_max = MAX(first->fd, second->fd) + 1;
+        if (select(fd_max, &read_fds, NULL, NULL, NULL) == -1) {
+            fprintf(stderr, "%s: select: %s\n", progname, strerror(errno));
+            return;
+        }
+
+        char buf[4096];
+        int indata_size = recv(first->fd, buf, sizeof(buf), 0);
+        if (indata_size == 0) {
+            printf("Socket hung up\n");
+            return;
+        }
+
+        if (indata_size > 0) {
+            if (send(second->fd, buf, indata_size, 0) == -1) {
+                fprintf(stderr, "%s: send: %s\n", progname, strerror(errno));
+            }
+        }
+
+        indata_size = recv(second->fd, buf, sizeof(buf), 0);
+        if (indata_size == 0) {
+            printf("Socket hung up\n");
+            return;
+        }
+
+        if (indata_size > 0) {
+            if (send(first->fd, buf, indata_size, 0) == -1) {
+                fprintf(stderr, "%s: send: %s\n", progname, strerror(errno));
+            }
+        }
+    }
 }

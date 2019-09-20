@@ -36,6 +36,12 @@ socket_t *socket_accept(socket_t const *const socket);
 void socket_send(socket_t const *const socket, char const *const data);
 
 /**
+ * Joins two sockets with each other, so that data from one gets sent to the
+ * other. Returns when one of the sockets closes connection.
+ */
+void socket_join(socket_t *first, socket_t *second);
+
+/**
  * Closes and frees a socket.
 */
 void socket_close(socket_t *socket);
