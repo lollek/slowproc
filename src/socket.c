@@ -32,7 +32,15 @@ void socket_close(socket_t *socket) {
     free(socket);
 }
 
-connection_t *socket_accept(socket_t const *const socket) {
+void socket_send(socket_t const *const socket, char const *const data) {
+    int const datasize = strlen(data);
+    int const status = send(socket->fd, data, datasize, 0);
+    if (status == -1) {
+        fprintf(stderr, "%s: accept: %s\n", progname, strerror(errno));
+    }
+}
+
+socket_t *socket_accept(socket_t const *const socket) {
     struct sockaddr_storage their_addr;
     socklen_t sin_size = sizeof(their_addr);
     int const fd = accept(socket->fd, (struct sockaddr *)&their_addr, &sin_size);
@@ -45,14 +53,13 @@ connection_t *socket_accept(socket_t const *const socket) {
     inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *)&their_addr),
             ipaddr_str, sizeof ipaddr_str);
 
-    connection_t *conn = xmalloc(sizeof(connection_t));
+    socket_t *conn = xmalloc(sizeof(socket_t));
     conn->fd = fd;
     strcpy(conn->ipaddr, ipaddr_str);
     return conn;
 }
 
-
-socket_t *socket_create(char const *restrict port, int queuesize) {
+socket_t *socket_create(char const *restrict hostname, char const *restrict port, int queuesize) {
     struct addrinfo hints = {
         .ai_flags = AI_PASSIVE,
         .ai_family = AF_UNSPEC,
@@ -65,7 +72,7 @@ socket_t *socket_create(char const *restrict port, int queuesize) {
     };
 
     struct addrinfo *servinfo;
-    int const status = getaddrinfo(NULL, port, &hints, &servinfo);
+    int const status = getaddrinfo(hostname, port, &hints, &servinfo);
     if (status != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
         return NULL;
@@ -80,33 +87,41 @@ socket_t *socket_create(char const *restrict port, int queuesize) {
             continue;
         }
 
-        int const yes = 1;
-        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-            fprintf(stderr, "%s: setsockopt: %s\n", progname, strerror(errno));
-            return NULL;
-        }
+        if (hostname == NULL) {
+            int const yes = 1;
+            if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+                fprintf(stderr, "%s: setsockopt: %s\n", progname, strerror(errno));
+                return NULL;
+            }
 
-        if (bind(sockfd, iter->ai_addr, iter->ai_addrlen) == -1) {
-            close(sockfd);
-            fprintf(stderr, "%s: bind: %s\n", progname, strerror(errno));
-            continue;
+            if (bind(sockfd, iter->ai_addr, iter->ai_addrlen) == -1) {
+                close(sockfd);
+                fprintf(stderr, "%s: bind: %s\n", progname, strerror(errno));
+                continue;
+            }
+        } else {
+            if (connect(sockfd, iter->ai_addr, iter->ai_addrlen) == -1) {
+                close(sockfd);
+                fprintf(stderr, "%s: connect: %s\n", progname, strerror(errno));
+                continue;
+            }
         }
 
         break;
     }
     freeaddrinfo(servinfo);
 
-
     if (iter == NULL)  {
         fprintf(stderr, "%s: failed to bind\n", progname);
         return NULL;
     }
 
-    if (listen(sockfd, queuesize) == -1) {
-        fprintf(stderr, "%s: listen: %s\n", progname, strerror(errno));
-        return NULL;
+    if (hostname == NULL) {
+        if (listen(sockfd, queuesize) == -1) {
+            fprintf(stderr, "%s: listen: %s\n", progname, strerror(errno));
+            return NULL;
+        }
     }
-
 
     socket_t *socket = xmalloc(sizeof(socket_t));
     socket->fd = sockfd;
